@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>누렁이</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+  body { position: relative; font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; }
+
+  /* ---------- 말풍선 ---------- */
+  #bubble {
+    position: absolute; left: 50%; bottom: 162px; transform: translateX(-50%);
+    width: max-content; max-width: 270px; box-sizing: border-box;
+    padding: 10px 14px; border-radius: 16px;
+    background: #fffdf8; color: #3b342d; border: 1.5px solid #d9c9ad;
+    font-size: 13.5px; line-height: 1.5; word-break: keep-all; overflow-wrap: anywhere;
+    box-shadow: 0 3px 10px rgba(0,0,0,.14);
+    transition: opacity .2s, transform .2s;
+  }
+  #bubble::after {
+    content: ""; position: absolute; left: 50%; bottom: -8px; width: 13px; height: 13px;
+    background: #fffdf8; border-right: 1.5px solid #d9c9ad; border-bottom: 1.5px solid #d9c9ad;
+    transform: translateX(-50%) rotate(45deg);
+  }
+  #bubble.hidden { opacity: 0; transform: translateX(-50%) translateY(6px); pointer-events: none; }
+  #text { max-height: 138px; overflow-y: auto; white-space: pre-line; }
+  #text.thinking::after { content: "…"; animation: dots 1s steps(3) infinite; }
+  #input {
+    display: block; width: 230px; margin-top: 8px; padding: 6px 9px; box-sizing: border-box;
+    border: 1.5px solid #d9c9ad; border-radius: 10px; outline: none;
+    font: inherit; color: inherit; background: #fff;
+  }
+  #input:focus { border-color: #e0a45a; }
+  #input.hidden { display: none; }
+
+  /* ---------- 강아지 (sprites 폴더의 그림을 동작에 따라 바꿔 보여 준다) ---------- */
+  #shadow { position: absolute; left: 50%; bottom: 1px; width: 96px; height: 9px; margin-left: -48px;
+    border-radius: 50%; background: rgba(0,0,0,.16); filter: blur(2px); }
+  #sprite { position: absolute; cursor: grab; -webkit-user-drag: none; --flip: 1;
+    transform: scaleX(var(--flip)); animation: breathe 1.6s ease-in-out infinite alternate; }
+  #sprite.run { animation: hop .26s ease-out infinite alternate; }
+  #sprite.run.frames, #sprite.eat.frames, #sprite.happy.frames { animation: none; } /* 장면 그림이 직접 움직이므로 튀는 효과는 끈다 */
+  #sprite.happy { animation: jump .3s ease-out infinite alternate; }
+  #sprite.surprise { animation: wiggle .16s ease-in-out infinite alternate; cursor: grabbing; }
+  #sprite.eat { animation: nibble .32s ease-in-out infinite alternate; }
+  #sprite.sleep { animation: breathe 2.6s ease-in-out infinite alternate; }
+  #zzz { position: absolute; display: none; color: #7f8fb5; font-weight: 800; font-size: 14px; letter-spacing: 1px;
+    animation: float 2.4s ease-in-out infinite; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
+  #zzz.on { display: block; }
+  #sprite.pet { animation: pat .38s ease-in-out infinite alternate; } /* 쓰다듬으면 살짝 눌린다 */
+  #hearts { position: absolute; left: 50%; width: 120px; margin-left: -60px; display: none; text-align: center;
+    color: #f08a8a; font-size: 15px; letter-spacing: 14px; animation: float 1.3s ease-in-out infinite;
+    text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
+  #hearts.on { display: block; }
+
+  @keyframes breathe { from { transform: scaleX(var(--flip)) scaleY(1); } to { transform: scaleX(var(--flip)) scaleY(1.025); } }
+  @keyframes hop { from { transform: scaleX(var(--flip)) translateY(0) rotate(1.5deg); } to { transform: scaleX(var(--flip)) translateY(-8px) rotate(-2.5deg); } }
+  @keyframes jump { from { transform: translateY(0) scaleY(.97); } to { transform: translateY(-11px) scaleY(1.02); } }
+  @keyframes wiggle { from { transform: rotate(-5deg); } to { transform: rotate(5deg); } }
+  @keyframes nibble { from { transform: rotate(0); } to { transform: rotate(-1.6deg) translateY(1px); } }
+  @keyframes pat { from { transform: scaleY(1); } to { transform: scaleY(.94) scaleX(1.03); } }
+  @keyframes float { 0% { opacity: 0; transform: translateY(8px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-12px); } }
+  @keyframes dots { 0% { clip-path: inset(0 66% 0 0); } 50% { clip-path: inset(0 33% 0 0); } 100% { clip-path: inset(0 0 0 0); } }
+</style>
+</head>
+<body>
+  <div id="bubble" class="hit hidden">
+    <div id="text"></div>
+    <input id="input" class="hidden" maxlength="500" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div id="shadow"></div>
+  <img id="sprite" class="hit" alt="누렁이" draggable="false">
+  <div id="zzz">z Z z</div>
+  <div id="hearts">♥ ♥</div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

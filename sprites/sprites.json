@@ -1,0 +1,153 @@
+{
+  "wag": {
+    "frames": [
+      "wag1.png",
+      "wag2.png",
+      "wag3.png",
+      "wag4.png",
+      "wag5.png",
+      "wag6.png",
+      "wag7.png",
+      "wag8.png"
+    ],
+    "ms": 130,
+    "k": 0.927,
+    "w": 356,
+    "h": 324,
+    "cx": 173.8,
+    "foot": 3
+  },
+  "run": {
+    "frames": [
+      "run1.png",
+      "run2.png",
+      "run3.png",
+      "run4.png"
+    ],
+    "ms": 115,
+    "k": 1.06,
+    "w": 348,
+    "h": 303,
+    "cx": 175.6,
+    "foot": 3
+  },
+  "surprise": {
+    "w": 360,
+    "h": 267,
+    "cx": 180.0,
+    "foot": 3
+  },
+  "happy": {
+    "frames": [
+      "happy1.png",
+      "happy2.png",
+      "happy3.png",
+      "happy4.png",
+      "happy5.png",
+      "happy6.png",
+      "happy7.png",
+      "happy8.png"
+    ],
+    "ms": 140,
+    "k": 0.865,
+    "w": 334,
+    "h": 440,
+    "cx": 166.2,
+    "foot": 3
+  },
+  "eat": {
+    "frames": [
+      "eat1.png",
+      "eat2.png",
+      "eat3.png",
+      "eat4.png",
+      "eat5.png",
+      "eat6.png",
+      "eat7.png",
+      "eat8.png"
+    ],
+    "ms": 180,
+    "k": 0.932,
+    "w": 336,
+    "h": 342,
+    "cx": 176.7,
+    "foot": 3
+  },
+  "coffee": {
+    "w": 342,
+    "h": 292,
+    "cx": 190.0,
+    "foot": 3
+  },
+  "study": {
+    "w": 450,
+    "h": 277,
+    "cx": 225.0,
+    "foot": 3
+  },
+  "sit": {
+    "frames": [
+      "sit1.png",
+      "sit2.png",
+      "sit3.png",
+      "sit4.png",
+      "sit5.png",
+      "sit6.png",
+      "sit7.png"
+    ],
+    "ms": 150,
+    "k": 0.806,
+    "w": 330,
+    "h": 367,
+    "cx": 159,
+    "foot": 3
+  },
+  "sleep": {
+    "w": 404,
+    "h": 211,
+    "cx": 202.0,
+    "foot": 3
+  },
+  "pet": {
+    "frames": [
+      "sit2.png",
+      "sit3.png",
+      "sit3.png",
+      "sit3.png"
+    ],
+    "ms": 250,
+    "k": 0.806,
+    "w": 330,
+    "h": 367,
+    "cx": 159,
+    "foot": 3
+  },
+  "paw": {
+    "frames": [
+      "happy1.png",
+      "happy2.png",
+      "happy2.png",
+      "happy2.png",
+      "happy2.png",
+      "happy1.png"
+    ],
+    "ms": 300,
+    "k": 0.865,
+    "w": 334,
+    "h": 440,
+    "cx": 166.2,
+    "foot": 3
+  },
+  "leap": {
+    "frames": [
+      "happy4.png",
+      "happy5.png"
+    ],
+    "ms": 180,
+    "k": 0.865,
+    "w": 334,
+    "h": 440,
+    "cx": 166.2,
+    "foot": 3
+  }
+}

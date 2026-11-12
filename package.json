@@ -1,0 +1,16 @@
+{
+  "name": "desktop-puppy",
+  "version": "0.1.0",
+  "description": "바탕화면을 돌아다니며 다정하게 잔소리하는 하얀 강아지 agent",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}
