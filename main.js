@@ -5,11 +5,18 @@ const fs = require("fs");
 const brain = require("./brain");
 const reminders = require("./reminders");
 
-const WIN_W = 320;
-const WIN_H = 380; // 폴짝 뛸 때 말풍선에 닿지 않게 여유를 둔다
+const BASE_W = 320;
+const BASE_H = 380; // 폴짝 뛸 때 말풍선에 닿지 않게 여유를 둔다
+const BIG = 5; // 쓰다듬기 PETS_PER_BIG번마다 이만큼 커진다
+const BIG_W = 700; // 커졌을 때의 창 크기
+const BIG_H = 820;
+const BIG_MS = 8000; // 커져 있는 시간
+const PETS_PER_BIG = 5;
+let WIN_W = BASE_W;
+let WIN_H = BASE_H;
 const TICK = 33; // 약 30fps
 const GRAVITY = 1.6; // 한 틱마다 떨어지는 속도가 늘어나는 양
-const DOG_H = 120; // 창 바닥에서 강아지 머리 꼭대기까지의 높이
+let DOG_H = 120; // 창 바닥에서 강아지 머리 꼭대기까지의 높이
 const SPEED = 2.2; // 한 틱에 달리는 픽셀 수
 
 let win = null;
@@ -58,11 +65,40 @@ const ACTIONS = {
   follow: { label: "🏃 따라와", state: "idle", ms: 7000, follow: true },
 };
 
+// 강아지 크기를 바꾼다 (1 = 보통, BIG = 커진 상태). 발이 있던 자리는 그대로 둔다.
+let bigTimer = null;
+function setBig(k) {
+  const cx = pet.x + WIN_W / 2;
+  const bottom = pet.y + WIN_H;
+  WIN_W = k === 1 ? BASE_W : BIG_W;
+  WIN_H = k === 1 ? BASE_H : BIG_H;
+  DOG_H = 120 * k;
+  pet.x = Math.max(minX(), Math.min(maxX(), cx - WIN_W / 2));
+  pet.y = bottom - WIN_H;
+  win.setBounds({ x: Math.round(pet.x), y: Math.round(pet.y), width: WIN_W, height: WIN_H });
+  send("size", { k });
+}
+
+// 쓰다듬은 횟수를 세고(친밀도), PETS_PER_BIG번째마다 잠깐 커진다.
+function countPet() {
+  const s = brain.loadSettings();
+  s.pets = (s.pets || 0) + 1;
+  brain.saveSettings(s);
+  if (s.pets % PETS_PER_BIG === 0) growForAWhile();
+}
+
+function growForAWhile() {
+  setBig(BIG);
+  clearTimeout(bigTimer);
+  bigTimer = setTimeout(() => setBig(1), BIG_MS);
+}
+
 function doAction(name) {
   const a = ACTIONS[name];
   if (!a || pet.drag) return;
   pet.act = true;
   brain.day.bump("plays");
+  if (name === "pet") countPet();
   pet.follow = !!a.follow;
   setState(a.state, a.ms);
   if (a.leap && pet.y >= groundY()) leapTo(area.y);
@@ -213,6 +249,10 @@ function showMenu() {
   });
   Menu.buildFromTemplate([
     { label: `${s.name}에게 말 걸기`, click: () => send("open-chat") },
+    {
+      label: `친밀도: 쓰다듬기 ${s.pets || 0}번 (${PETS_PER_BIG - ((s.pets || 0) % PETS_PER_BIG)}번 더 하면 커져요)`,
+      enabled: false,
+    },
     { label: "놀아 주기", submenu: actionItems() },
     { label: "오늘 할 일 보기", click: () => say(brain.todoLine()) },
     { label: "하루 마무리 듣기", click: () => nagNow("leave") },
@@ -280,6 +320,7 @@ function createWindow() {
     }, 1200);
     if (process.env.PUPPY_SHOT) debugShots(process.env.PUPPY_SHOT);
     // 개발용: 시작 3초 뒤에 지정한 동작을 시킨다 (예: PUPPY_ACT=follow)
+    if (process.env.PUPPY_BIG) setTimeout(growForAWhile, 3000); // 개발용: 시작 3초 뒤에 커진다
     if (process.env.PUPPY_ACT) setTimeout(() => doAction(process.env.PUPPY_ACT), 3000);
     if (process.env.PUPPY_LOG) {
       // 개발용: 2초마다 상태를 기록한다
@@ -332,6 +373,13 @@ async function debugShots(dir) {
   send("open-chat");
   await wait(800);
   await shot("4-chat");
+  send("close-chat");
+  await wait(300);
+  setState("pet");
+  setBig(BIG);
+  await wait(900);
+  await shot("5-big");
+  console.log("big bounds", JSON.stringify(win.getBounds()));
   app.quit();
 }
 

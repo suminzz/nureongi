@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("pet", {
   sprites: () => ipcRenderer.invoke("sprites"),
   chat: (text) => ipcRenderer.invoke("chat", text),
   onState: (cb) => ipcRenderer.on("pet-state", (_e, s) => cb(s)),
+  onSize: (cb) => ipcRenderer.on("size", (_e, s) => cb(s)),
+  onCloseChat: (cb) => ipcRenderer.on("close-chat", () => cb()),
   onSay: (cb) => ipcRenderer.on("say", (_e, s) => cb(s)),
   onOpenChat: (cb) => ipcRenderer.on("open-chat", () => cb()),
 });

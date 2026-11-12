@@ -7,7 +7,9 @@ const textEl = document.getElementById("text");
 const input = document.getElementById("input");
 
 const SCALE = 0.4; // 시트 그림을 화면에 줄여서 보여 주는 비율
-const CENTER = 160; // 창의 가로 중심
+const center = () => window.innerWidth / 2; // 창의 가로 중심
+const shadow = document.getElementById("shadow");
+let big = 1; // 강아지 크기 배율 (쓰다듬기를 많이 하면 잠깐 커진다)
 // 본체가 알려 주는 상태 → 보여 줄 그림
 const POSE = { idle: "wag", walk: "run", sit: "sit", sleep: "sleep", drag: "surprise",
   eat: "eat", coffee: "coffee", study: "study", happy: "happy", pet: "pet", paw: "paw", leap: "leap" };
@@ -28,15 +30,15 @@ function render() {
   const pose = current.state === "drag" ? "surprise" : override || POSE[current.state] || "wag";
   const s = sprites[pose];
   if (dog.dataset.pose !== pose) {
-    const scale = SCALE * (s.k || 1);
+    const scale = SCALE * (s.k || 1) * big;
     dog.dataset.pose = pose;
     dog.className = `hit ${pose}${s.frames ? " frames" : ""}`;
     dog.style.width = `${s.w * scale}px`;
-    dog.style.left = `${CENTER - s.cx * scale}px`;
+    dog.style.left = `${center() - s.cx * scale}px`;
     dog.style.bottom = `${-s.foot * scale}px`;
     dog.style.transformOrigin = `${s.cx * scale}px 100%`;
     zzz.classList.toggle("on", pose === "sleep");
-    zzz.style.left = `${CENTER + 28}px`;
+    zzz.style.left = `${center() + 28 * big}px`;
     zzz.style.bottom = `${s.h * scale - 4}px`;
     hearts.classList.toggle("on", pose === "pet");
     hearts.style.bottom = `${s.h * scale - 2}px`;
@@ -62,6 +64,22 @@ function happyMs() {
   const s = sprites && sprites.happy;
   return s && s.frames ? s.frames.length * (s.ms || 120) * 2 : 1800;
 }
+
+// 크기가 바뀌면 그림자와 말풍선 자리도 맞추고 그림을 다시 놓는다
+function resize() {
+  shadow.style.width = `${96 * big}px`;
+  shadow.style.height = `${9 * big}px`;
+  shadow.style.marginLeft = `${-48 * big}px`;
+  bubble.style.bottom = `${116 * big + 46}px`;
+  hearts.style.fontSize = `${15 * Math.sqrt(big)}px`;
+  dog.dataset.pose = "";
+  render();
+}
+window.pet.onSize(({ k }) => {
+  big = k;
+  resize();
+});
+window.addEventListener("resize", resize); // 창 크기가 실제로 바뀐 뒤에 한 번 더 맞춘다
 
 function showPose(pose, ms) {
   clearTimeout(overrideTimer);
@@ -146,6 +164,7 @@ function closeChat() {
 }
 
 window.pet.onOpenChat(openChat);
+window.pet.onCloseChat(closeChat);
 
 input.addEventListener("keydown", async (e) => {
   touchChat();
