@@ -54,7 +54,7 @@ const ACTIONS = {
   pet: { label: "🤚 쓰다듬기", state: "pet", ms: 4000 },
   sit: { label: "🐶 앉아", state: "sit", ms: 6000 },
   paw: { label: "🐾 손", state: "paw", ms: 3600 },
-  jump: { label: "⭐ 점프", state: "happy", ms: 2240 },
+  jump: { label: "⭐ 점프", state: "leap", ms: 5000, leap: true }, // 화면 천장까지 뛰어오른다
   follow: { label: "🏃 따라와", state: "idle", ms: 7000, follow: true },
 };
 
@@ -65,12 +65,21 @@ function doAction(name) {
   brain.day.bump("plays");
   pet.follow = !!a.follow;
   setState(a.state, a.ms);
+  if (a.leap && pet.y >= groundY()) leapTo(area.y);
 }
 
 const actionItems = () => Object.entries(ACTIONS).map(([name, a]) => ({ label: a.label, click: () => doAction(name) }));
 
 function showActionMenu() {
   Menu.buildFromTemplate(actionItems()).popup({ window: win });
+}
+
+// 머리가 화면의 top 높이에 닿도록 뛰어오른다. 내려오는 것은 tick의 떨어지기가 맡는다.
+function leapTo(top) {
+  const headY = groundY() + WIN_H - DOG_H;
+  pet.vy = -Math.sqrt(2 * GRAVITY * Math.max(0, headY - top)) * 1.02; // 틱 단위 계산이라 조금 모자라서 보정
+  pet.y -= 1;
+  setState("leap");
 }
 
 // 따라갈 마우스 위치. 개발용으로 PUPPY_MOUSE="x,y"를 주면 그 자리에 마우스가 있는 것으로 친다.
@@ -84,10 +93,7 @@ function followCursor() {
   // 마우스가 머리 위로 높이 있으면 그 높이까지(화면 맨 위까지) 뛰어오른다
   const headY = groundY() + WIN_H - DOG_H;
   if (Math.abs(dx) < 90 && cursor.y < headY - 60) {
-    const top = Math.max(area.y, cursor.y - 20); // 뛰어올랐을 때 머리가 닿을 높이
-    pet.vy = -Math.sqrt(2 * GRAVITY * (headY - top)) * 1.02; // 틱 단위 계산이라 조금 모자라서 보정
-    pet.y -= 1;
-    setState("leap");
+    leapTo(Math.max(area.y, cursor.y - 20));
     return;
   }
   const far = Math.abs(dx) > (pet.state === "walk" ? 10 : 40); // 멈췄다 달렸다를 되풀이하지 않게 여유를 둔다
