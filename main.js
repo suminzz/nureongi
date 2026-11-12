@@ -250,7 +250,7 @@ function showMenu() {
   Menu.buildFromTemplate([
     { label: `${s.name}에게 말 걸기`, click: () => send("open-chat") },
     {
-      label: `친밀도: 쓰다듬기 ${s.pets || 0}번 (${PETS_PER_BIG - ((s.pets || 0) % PETS_PER_BIG)}번 더 하면 커져요)`,
+      label: `친밀도: 쓰다듬기 ${s.pets || 0}번`,
       enabled: false,
     },
     { label: "놀아 주기", submenu: actionItems() },
