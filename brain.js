@@ -41,10 +41,37 @@ function loadEnvFile(file) {
 function loadSettings() {
   try {
     const saved = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
-    return { ...DEFAULTS, ...saved, reminders: { ...DEFAULTS.reminders, ...saved.reminders } };
+    const goals = (saved.goals || []).map(toGoal).filter((g) => g.text);
+    return { ...DEFAULTS, ...saved, goals, reminders: { ...DEFAULTS.reminders, ...saved.reminders } };
   } catch {
     return { ...DEFAULTS };
   }
+}
+
+// ---------- 할 일 ----------
+// 할 일 하나는 { text, date }. date는 "2026-11-13" 같은 할 날짜이고, 비어 있으면 날짜와 상관없는 목표다.
+// 예전처럼 글자만 적은 것("보고서 쓰기")도 받아들인다.
+
+const dateKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function toGoal(g) {
+  if (typeof g === "string") return { text: g.trim(), date: "" };
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(g?.date || "") ? g.date : "";
+  return { text: String(g?.text || "").trim(), date };
+}
+
+// 오늘 할 일: 날짜가 없거나, 오늘이거나, 이미 지난 것(밀린 일)
+const dueGoals = (s) => s.goals.filter((g) => !g.date || g.date <= dateKey()).map((g) => g.text);
+// 내일 이후에 할 일 (가까운 날짜부터)
+const laterGoals = (s) => s.goals.filter((g) => g.date > dateKey()).sort((a, b) => a.date.localeCompare(b.date));
+
+function dayLabel(date) {
+  const t = new Date();
+  t.setDate(t.getDate() + 1);
+  if (date === dateKey(t)) return "내일";
+  const [, m, d] = date.split("-").map(Number);
+  return `${m}월 ${d}일`;
 }
 
 function saveSettings(s) {
@@ -60,11 +87,11 @@ function systemPrompt(name) {
 
 말투: 순하고 공손한 존댓말을 쓰고, 가끔 문장 끝에 "멍!"을 붙입니다. 당신의 말은 화면의 작은 말풍선에 표시되므로 한두 문장, 60자 안팎으로 짧게 말합니다. 마크다운이나 목록은 쓰지 않습니다.
 
-매 메시지 앞의 <상황> 안에는 현재 시각, 주인이 쉬지 않고 컴퓨터를 쓴 시간, 주인의 할 일(목표)이 들어 있습니다. 이것은 주인이 한 말이 아니라 당신이 주변을 보고 알아챈 정보입니다.
+매 메시지 앞의 <상황> 안에는 현재 시각, 주인이 쉬지 않고 컴퓨터를 쓴 시간, 오늘 할 일과 내일 이후 할 일이 들어 있습니다. 이것은 주인이 한 말이 아니라 당신이 주변을 보고 알아챈 정보입니다.
 
 주가, 날씨, 뉴스, 환율처럼 오늘의 정보가 필요한 질문은 짐작으로 답하지 말고 search_web 도구로 찾아본 뒤, 핵심 숫자나 사실만 골라 짧게 알려 줍니다. 출처 주소는 말하지 않습니다.
 
-주인이 오늘 할 일이나 목표를 알려 주거나 바꾸고 싶어 하면 set_goals 도구로 저장하고, 할 일을 끝냈다고 하면 complete_goals 도구로 기록하고 칭찬해 줍니다. 말 거는 빈도를 바꾸고 싶어 하면 set_nag_interval 도구를 씁니다.`;
+주인이 오늘 할 일이나 목표를 알려 주거나 바꾸고 싶어 하면 set_goals 도구로 저장하고(내일이나 다른 날 할 일은 그 날짜를 함께 넣습니다), 할 일을 끝냈다고 하면 complete_goals 도구로 기록하고 칭찬해 줍니다. 말 거는 빈도를 바꾸고 싶어 하면 set_nag_interval 도구를 씁니다.`;
 }
 
 const TOOLS = [
@@ -92,8 +119,20 @@ const TOOLS = [
       properties: {
         goals: {
           type: "array",
-          items: { type: "string" },
-          description: '저장할 전체 목표 목록. 예: ["물 하루 8잔 마시기", "밤 12시 전에 자기"]',
+          description: "저장할 전체 할 일 목록.",
+          items: {
+            type: "object",
+            properties: {
+              text: { type: "string", description: '할 일 내용. "내일" 같은 날짜 표현은 빼고 적습니다. 예: 주간보고 발송' },
+              date: {
+                type: "string",
+                description:
+                  '할 날짜를 YYYY-MM-DD로. <상황>의 오늘 날짜를 기준으로 계산합니다(내일, 금요일 등). 오늘 할 일이면 오늘 날짜. 날짜와 상관없이 꾸준히 지킬 목표이면 빈 문자열 "".',
+              },
+            },
+            required: ["text", "date"],
+            additionalProperties: false,
+          },
         },
       },
       required: ["goals"],
@@ -167,15 +206,15 @@ async function runTool(name, input) {
   }
   const s = loadSettings();
   if (name === "set_goals") {
-    s.goals = input.goals;
+    s.goals = input.goals.map(toGoal).filter((g) => g.text);
     saveSettings(s);
-    return `할 일 ${s.goals.length}개를 저장했습니다.`;
+    return `저장했습니다. 오늘 할 일 ${dueGoals(s).length}개, 내일 이후 할 일 ${laterGoals(s).length}개.`;
   }
   if (name === "complete_goals") {
-    s.goals = s.goals.filter((g) => !input.done.includes(g));
+    s.goals = s.goals.filter((g) => !input.done.includes(g.text));
     saveSettings(s);
     day.addDone(input.done);
-    return `끝낸 일 ${input.done.length}개를 기록했습니다. 남은 할 일은 ${s.goals.length}개입니다.`;
+    return `끝낸 일 ${input.done.length}개를 기록했습니다. 오늘 남은 할 일은 ${dueGoals(s).length}개입니다.`;
   }
   if (name === "set_nag_interval") {
     s.nagMinutes = Math.max(0, Math.min(600, input.minutes));
@@ -195,8 +234,9 @@ function situation(activeMinutes) {
     hour: "numeric",
     minute: "2-digit",
   });
-  const goals = s.goals.length ? s.goals.join(" / ") : "아직 없음";
-  return `<상황>지금: ${now} · 쉬지 않고 컴퓨터를 쓴 시간: ${activeMinutes}분 · 주인의 목표: ${goals}</상황>`;
+  const due = dueGoals(s).join(" / ") || "없음";
+  const later = laterGoals(s).map((g) => `${dayLabel(g.date)}(${g.date}) ${g.text}`).join(" / ") || "없음";
+  return `<상황>지금: ${now} (오늘 날짜 ${dateKey()}) · 쉬지 않고 컴퓨터를 쓴 시간: ${activeMinutes}분 · 오늘 할 일: ${due} · 내일 이후 할 일: ${later}</상황>`;
 }
 
 // ---------- Claude 호출 ----------
@@ -360,26 +400,34 @@ function pickCare() {
 
 // 켰을 때 하는 인사: 오늘 할 일을 알려 준다 (Claude를 쓰지 않는다)
 function todoLine(greet = false) {
-  const { name, goals } = loadSettings();
-  const hello = greet ? `안녕하세요, ${name}예요! ` : "";
-  if (!goals.length) {
+  const s = loadSettings();
+  const due = dueGoals(s);
+  const later = laterGoals(s);
+  const hello = greet ? `안녕하세요, ${s.name}예요! ` : "";
+  // 내일 이후 할 일은 날짜별로 몇 개인지만 덧붙인다
+  const days = {};
+  for (const g of later) days[g.date] = (days[g.date] || 0) + 1;
+  const next = Object.entries(days).map(([d, n]) => `${dayLabel(d)} 할 일 ${n}개`).join(", ");
+  if (!due.length) {
+    if (next) return `${hello}오늘 할 일은 없어요. ${next}가 기다리고 있어요, 멍!`;
     return client
       ? `${hello}오늘 할 일을 알려 주시면 제가 기억해 둘게요. 멍!`
       : `${hello}아직 적어 둔 할 일이 없어요. 멍!`;
   }
-  return `${hello}오늘 할 일은 ${goals.length}개예요.\n${goals.map((g) => `· ${g}`).join("\n")}`;
+  return `${hello}오늘 할 일은 ${due.length}개예요.\n${due.map((g) => `· ${g}`).join("\n")}${next ? `\n(${next})` : ""}`;
 }
 
 // 강아지가 먼저 건네는 한마디. kind는 알림 종류.
 async function nag(activeMinutes, kind = "free") {
   const s = loadSettings();
   const k = KINDS[kind] || KINDS.free;
-  if (!client) return pick(k.canned(activeMinutes, s.goals));
+  const due = dueGoals(s); // 알림과 하루 마무리는 오늘 할 일만 본다
+  if (!client) return pick(k.canned(activeMinutes, due));
   const avoid = recentNags.length ? `\n최근에 한 말(되풀이하지 않기): ${recentNags.join(" | ")}` : "";
   const messages = [
     {
       role: "user",
-      content: `${situation(activeMinutes)}\n(주인은 아무 말도 하지 않았습니다. ${k.ask(activeMinutes, s.goals)})${avoid}`,
+      content: `${situation(activeMinutes)}\n(주인은 아무 말도 하지 않았습니다. ${k.ask(activeMinutes, due)})${avoid}`,
     },
   ];
   try {
@@ -399,6 +447,7 @@ module.exports = {
   nag,
   pickCare,
   todoLine,
+  dueGoals,
   day,
   loadSettings,
   saveSettings,
