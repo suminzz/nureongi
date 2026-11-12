@@ -41,7 +41,8 @@ function send(channel, payload) {
 function setState(state, ms) {
   pet.state = state;
   if (ms) pet.timer = ms;
-  send("pet-state", { state: pet.state, dir: pet.dir, act: !!pet.act, fast: !!pet.dash });
+  const fast = !!pet.dash || (pet.fetch && pet.fetch.phase === "chase");
+  send("pet-state", { state: pet.state, dir: pet.dir, act: !!pet.act, fast: !!fast });
 }
 
 // 평소에는 달리다가 멈춰서 꼬리를 흔드는 것만 되풀이한다.
@@ -63,6 +64,7 @@ const ACTIONS = {
   paw: { label: "🐾 손", state: "paw", ms: 3600 },
   jump: { label: "⭐ 점프", state: "leap", ms: 5000, leap: true }, // 화면 천장까지 뛰어오른다
   follow: { label: "🏃 따라와", state: "idle", ms: 7000, follow: true },
+  fetch: { label: "🎾 공 던지기", state: "idle", ms: 25000, fetch: true }, // ms는 혹시 못 끝낼 때를 위한 한도
 };
 
 // 강아지 크기를 바꾼다 (1 = 보통, BIG = 커진 상태). 발이 있던 자리는 그대로 둔다.
@@ -98,11 +100,137 @@ function doAction(name) {
   if (!a || pet.drag) return;
   pet.act = true;
   pet.dash = false;
+  stopFetch();
   brain.day.bump("plays");
   if (name === "pet") countPet();
   pet.follow = !!a.follow;
   setState(a.state, a.ms);
   if (a.leap && pet.y >= groundY()) leapTo(area.y);
+  if (a.fetch) throwBall();
+}
+
+// ---------- 공 던지기 ----------
+// 공은 작은 창을 하나 더 띄워서 그린다. 본체가 틱마다 위치를 옮긴다.
+const BALL_WIN = 40; // 공 창의 한 변
+const BALL_R = 14; // 공의 반지름
+let ballWin = null;
+let ball = null; // { x, y, vx, vy, mode: "fly" | "rest" | "held" } (x, y는 공 가운데의 화면 위치)
+const floorY = () => area.y + area.height;
+
+function showBall() {
+  if (!ballWin || ballWin.isDestroyed()) {
+    ballWin = new BrowserWindow({
+      width: BALL_WIN, height: BALL_WIN, transparent: true, frame: false, resizable: false, hasShadow: false,
+      skipTaskbar: true, focusable: false, fullscreenable: false, show: false,
+      webPreferences: { backgroundThrottling: false },
+    });
+    ballWin.setAlwaysOnTop(true, "floating");
+    ballWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    ballWin.setIgnoreMouseEvents(true);
+    ballWin.loadFile(path.join(__dirname, "ball.html"));
+  }
+  ballWin.showInactive();
+}
+
+function spinBall(how) {
+  if (!ballWin || ballWin.isDestroyed() || ball.spin === how) return;
+  ball.spin = how;
+  ballWin.webContents.executeJavaScript(`location.hash = ${JSON.stringify(how)}`).catch(() => {});
+}
+
+// 강아지 머리 위에서 공을 던진다. 화면이 더 넓게 남은 쪽으로 날아간다.
+function throwBall() {
+  const cx = pet.x + WIN_W / 2;
+  const dir = cx - area.x < area.width / 2 ? 1 : -1;
+  ball = { x: cx, y: floorY() - DOG_H - 20, vx: dir * rand(11, 17), vy: -rand(17, 23), mode: "fly", spin: null };
+  pet.fetch = { phase: "watch", wait: 450, homeX: pet.x };
+  showBall();
+}
+
+function stopFetch() {
+  pet.fetch = null;
+  ball = null;
+  if (ballWin && !ballWin.isDestroyed()) ballWin.hide();
+}
+
+// 공을 한 틱 움직인다: 떨어지고, 바닥과 화면 끝에서 튀고, 굴러가다 멈춘다.
+function stepBall() {
+  if (!ball || !ballWin || ballWin.isDestroyed()) return;
+  const ground = floorY() - BALL_R;
+  if (ball.mode === "fly") {
+    ball.vy += GRAVITY;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    if (ball.x < area.x + BALL_R || ball.x > area.x + area.width - BALL_R) {
+      ball.x = Math.max(area.x + BALL_R, Math.min(area.x + area.width - BALL_R, ball.x));
+      ball.vx *= -0.7;
+    }
+    if (ball.y >= ground) {
+      ball.y = ground;
+      ball.vy = Math.abs(ball.vy) > 3 ? -ball.vy * 0.55 : 0; // 튈 때마다 낮아지다가 굴러간다
+      ball.vx *= 0.82;
+    } else if (ball.vy === 0) ball.vy = 0.01;
+    if (ball.y >= ground && ball.vy === 0) {
+      ball.vx *= 0.96;
+      if (Math.abs(ball.vx) < 0.4) {
+        ball.vx = 0;
+        ball.mode = "rest";
+      }
+    }
+    spinBall(Math.abs(ball.vx) < 0.4 ? "still" : ball.vx > 0 ? "right" : "left");
+  } else if (ball.mode === "held") {
+    // 입에 물고 있다: 강아지 입 위치를 따라간다
+    const k = DOG_H / 120;
+    ball.x = pet.x + WIN_W / 2 + pet.dir * 38 * k;
+    ball.y = pet.y + WIN_H - 58 * k;
+    spinBall("still");
+  } else spinBall("still");
+  ballWin.setPosition(Math.round(ball.x - BALL_WIN / 2), Math.round(ball.y - BALL_WIN / 2));
+}
+
+// 강아지 쪽 순서: 잠깐 쳐다보기 → 공 쫓아가기 → 물고 돌아오기 → 내려놓고 좋아하기
+function runToward(targetX, speed) {
+  const dx = targetX - pet.x;
+  if (Math.abs(dx) < 1) return true;
+  const dir = dx > 0 ? 1 : -1;
+  if (pet.state !== "walk" || pet.dir !== dir) {
+    pet.dir = dir;
+    setState("walk");
+  }
+  pet.x = Math.max(minX(), Math.min(maxX(), pet.x + dir * Math.min(Math.abs(dx), speed)));
+  return Math.abs(targetX - pet.x) < 1 || pet.x <= minX() || pet.x >= maxX();
+}
+
+function fetchStep() {
+  const f = pet.fetch;
+  if (!ball) return;
+  const k = DOG_H / 120;
+  if (f.phase === "watch") {
+    f.wait -= TICK;
+    if (f.wait <= 0) {
+      f.phase = "chase";
+      setState("walk");
+    }
+  } else if (f.phase === "chase") {
+    // 입이 공에 닿는 자리까지 달린다. 공이 높이 떠 있으면 그 아래에서 기다리듯 따라간다.
+    const dir = ball.x > pet.x + WIN_W / 2 ? 1 : -1;
+    const there = runToward(ball.x - dir * 38 * k - WIN_W / 2, SPEED * 3.2);
+    const low = ball.y > floorY() - 90 * k;
+    if (low && Math.abs(ball.x - (pet.x + WIN_W / 2)) < 60 * k) {
+      ball.mode = "held";
+      f.phase = "return";
+      setState("walk");
+    } else if (there && pet.state !== "idle") setState("idle");
+  } else if (f.phase === "return") {
+    if (runToward(f.homeX, SPEED * 2.2)) {
+      // 주인 앞에 공을 내려놓고 좋아한다
+      ball.mode = "rest";
+      ball.x = pet.x + WIN_W / 2 + pet.dir * 52 * k;
+      ball.y = floorY() - BALL_R;
+      f.phase = "cheer";
+      setState("happy", 2240);
+    }
+  }
 }
 
 // 비밀 주문 "산책": 신이 나서 화면 끝에서 끝까지 전력 질주한다. 메뉴에는 없다.
@@ -173,6 +301,7 @@ function followCursor() {
 
 function tick() {
   if (!win || win.isDestroyed()) return;
+  stepBall();
 
   if (pet.drag) {
     const c = screen.getCursorScreenPoint();
@@ -207,10 +336,12 @@ function tick() {
       pet.timer -= TICK;
       if (pet.follow) followCursor();
       if (pet.dash) dashStep();
+      if (pet.fetch) fetchStep();
       if (pet.timer <= 0) {
         pet.act = false;
         pet.follow = false;
         pet.dash = false;
+        stopFetch();
         setState("idle", 1200);
       }
     } else if (pet.busy) {
@@ -357,7 +488,7 @@ function createWindow() {
       setInterval(() => tops.push(win.getPosition()[1]), TICK);
       setInterval(() => {
         const [wx, wy] = win.getPosition();
-        console.log(`top=${Math.min(...tops.splice(0))} mouse=${mousePoint().x} act=${!!pet.act} state=${pet.state} busy=${pet.busy} timer=${Math.round(pet.timer)} x=${Math.round(pet.x)} win=${wx},${wy} ground=${groundY()} visible=${win.isVisible()}`);
+        console.log(`ball=${ball ? `${ball.mode}@${Math.round(ball.x)},${Math.round(ball.y)}` : "-"} fetch=${pet.fetch ? pet.fetch.phase : "-"} top=${Math.min(...tops.splice(0))} mouse=${mousePoint().x} act=${!!pet.act} state=${pet.state} busy=${pet.busy} timer=${Math.round(pet.timer)} x=${Math.round(pet.x)} win=${wx},${wy} ground=${groundY()} visible=${win.isVisible()}`);
       }, 2000);
     }
   });
@@ -409,6 +540,9 @@ async function debugShots(dir) {
   await wait(900);
   await shot("5-big");
   console.log("big bounds", JSON.stringify(win.getBounds()));
+  showBall();
+  await wait(800);
+  fs.writeFileSync(path.join(dir, "6-ball.png"), (await ballWin.webContents.capturePage()).toPNG());
   app.quit();
 }
 
@@ -418,6 +552,7 @@ ipcMain.on("drag-start", () => {
   pet.drag = { dx: c.x - pet.x, dy: c.y - pet.y };
   pet.act = false;
   pet.dash = false;
+  stopFetch();
   setState("drag");
 });
 ipcMain.on("drag-end", () => {
