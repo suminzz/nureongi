@@ -29,9 +29,10 @@ function render() {
   if (!sprites) return;
   const pose = current.state === "drag" ? "surprise" : override || POSE[current.state] || "wag";
   const s = sprites[pose];
-  if (dog.dataset.pose !== pose) {
+  const key = pose + (current.fast ? "!" : ""); // 전력 질주할 때는 같은 그림을 더 빨리 넘긴다
+  if (dog.dataset.pose !== key) {
     const scale = SCALE * (s.k || 1) * big;
-    dog.dataset.pose = pose;
+    dog.dataset.pose = key;
     dog.className = `hit ${pose}${s.frames ? " frames" : ""}`;
     dog.style.width = `${s.w * scale}px`;
     dog.style.left = `${center() - s.cx * scale}px`;
@@ -50,7 +51,7 @@ function render() {
       frameTimer = setInterval(() => {
         i = (i + 1) % s.frames.length;
         dog.src = `sprites/${s.frames[i]}`;
-      }, s.ms || 120);
+      }, (s.ms || 120) * (current.fast ? 0.55 : 1));
     } else {
       dog.src = `sprites/${pose}.png`;
     }

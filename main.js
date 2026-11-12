@@ -41,7 +41,7 @@ function send(channel, payload) {
 function setState(state, ms) {
   pet.state = state;
   if (ms) pet.timer = ms;
-  send("pet-state", { state: pet.state, dir: pet.dir, act: !!pet.act });
+  send("pet-state", { state: pet.state, dir: pet.dir, act: !!pet.act, fast: !!pet.dash });
 }
 
 // 평소에는 달리다가 멈춰서 꼬리를 흔드는 것만 되풀이한다.
@@ -97,11 +97,36 @@ function doAction(name) {
   const a = ACTIONS[name];
   if (!a || pet.drag) return;
   pet.act = true;
+  pet.dash = false;
   brain.day.bump("plays");
   if (name === "pet") countPet();
   pet.follow = !!a.follow;
   setState(a.state, a.ms);
   if (a.leap && pet.y >= groundY()) leapTo(area.y);
+}
+
+// 비밀 주문 "산책": 신이 나서 화면 끝에서 끝까지 전력 질주한다. 메뉴에는 없다.
+const DASH_SPEED = SPEED * 6;
+const DASH_MS = 8000;
+const DASH_LINES = ["산책이요?! 가요 가요, 멍멍!", "산책!! 저 벌써 신나요, 멍!", "산책이다! 달려요, 멍멍멍!"];
+
+function zoomies() {
+  if (pet.drag) return;
+  pet.act = true;
+  pet.follow = false;
+  pet.dash = true;
+  brain.day.bump("plays");
+  setState("walk", DASH_MS);
+}
+
+function dashStep() {
+  if (pet.state !== "walk") setState("walk");
+  pet.x += pet.dir * DASH_SPEED;
+  if (pet.x <= minX() || pet.x >= maxX()) {
+    pet.x = Math.max(minX(), Math.min(maxX(), pet.x));
+    pet.dir *= -1;
+    setState("walk");
+  }
 }
 
 const actionItems = () => Object.entries(ACTIONS).map(([name, a]) => ({ label: a.label, click: () => doAction(name) }));
@@ -181,9 +206,11 @@ function tick() {
       // 시킨 동작을 하는 중: 끝나면 다시 평소대로
       pet.timer -= TICK;
       if (pet.follow) followCursor();
+      if (pet.dash) dashStep();
       if (pet.timer <= 0) {
         pet.act = false;
         pet.follow = false;
+        pet.dash = false;
         setState("idle", 1200);
       }
     } else if (pet.busy) {
@@ -321,7 +348,9 @@ function createWindow() {
     if (process.env.PUPPY_SHOT) debugShots(process.env.PUPPY_SHOT);
     // 개발용: 시작 3초 뒤에 지정한 동작을 시킨다 (예: PUPPY_ACT=follow)
     if (process.env.PUPPY_BIG) setTimeout(growForAWhile, 3000); // 개발용: 시작 3초 뒤에 커진다
-    if (process.env.PUPPY_ACT) setTimeout(() => doAction(process.env.PUPPY_ACT), 3000);
+    if (process.env.PUPPY_ACT) {
+      setTimeout(() => (process.env.PUPPY_ACT === "dash" ? zoomies() : doAction(process.env.PUPPY_ACT)), 3000);
+    }
     if (process.env.PUPPY_LOG) {
       // 개발용: 2초마다 상태를 기록한다
       const tops = []; // 그동안 창이 실제로 올라간 가장 높은 위치를 보려고 모아 둔다
@@ -388,6 +417,7 @@ ipcMain.on("drag-start", () => {
   const c = screen.getCursorScreenPoint();
   pet.drag = { dx: c.x - pet.x, dy: c.y - pet.y };
   pet.act = false;
+  pet.dash = false;
   setState("drag");
 });
 ipcMain.on("drag-end", () => {
@@ -407,6 +437,10 @@ ipcMain.handle("sprites", () =>
 );
 ipcMain.handle("chat", (_e, text) => {
   lastNagAt = Date.now(); // 방금 대화했으면 잔소리는 잠시 미룬다
+  if (/산책/.test(String(text))) {
+    setTimeout(zoomies, 700); // 대답을 말풍선에 띄운 다음에 달리기 시작한다
+    return DASH_LINES[Math.floor(Math.random() * DASH_LINES.length)];
+  }
   return brain.chat(String(text).slice(0, 2000), activeMinutes);
 });
 
