@@ -63,11 +63,9 @@ def main():
         "w": R - L, "h": B - T, "cx": -L, "foot": B,
     }
     # 그림을 따로 받지 않은 동작은 있는 장면을 골라 만든다
-    # 쓰다듬기: 앉아서 눈을 감은 장면(3번)을 길게 / 손: 폴짝 뛰기의 앞발 든 장면(2번)을 길게
+    # 쓰다듬기: 앉아서 눈을 감은 장면(3번)을 길게
     manifest["pet"] = {**manifest["sit"], "frames": ["sit2.png", "sit3.png", "sit3.png", "sit3.png"], "ms": 250}
     if manifest.get("happy", {}).get("frames"):
-        manifest["paw"] = {**manifest["happy"], "ms": 300,
-                           "frames": ["happy1.png"] + ["happy2.png"] * 4 + ["happy1.png"]}
         # 높이 뛰기(따라오기 중): 공중에 뜬 장면 둘을 번갈아
         manifest["leap"] = {**manifest["happy"], "frames": ["happy4.png", "happy5.png"], "ms": 180}
     print("sit", json.dumps(manifest["sit"]), "anchors", [(round(a), int(b)) for a, b in anchors])

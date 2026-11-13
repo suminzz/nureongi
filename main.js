@@ -16,6 +16,8 @@ let WIN_W = BASE_W;
 let WIN_H = BASE_H;
 const TICK = 33; // 약 30fps
 const GRAVITY = 1.6; // 한 틱마다 떨어지는 속도가 늘어나는 양
+const GLIDE_MIN = 70; // 이보다 높은 데서 놓으면 날개를 펴고 내려온다 (바닥에서부터의 높이)
+const GLIDE_SPEED = 4.2; // 날개로 내려오는 속도 (한 틱마다)
 let DOG_H = 120; // 창 바닥에서 강아지 머리 꼭대기까지의 높이
 const SPEED = 2.2; // 한 틱에 달리는 픽셀 수
 
@@ -61,7 +63,7 @@ const ACTIONS = {
   eat: { label: "🍚 밥 주기", state: "eat", ms: 4320 },
   pet: { label: "🤚 쓰다듬기", state: "pet", ms: 4000 },
   sit: { label: "🐶 앉아", state: "sit", ms: 6000 },
-  paw: { label: "🐾 손", state: "paw", ms: 3600 },
+  paw: { label: "🐾 손", state: "paw", ms: 4320 },
   jump: { label: "⭐ 점프", state: "leap", ms: 5000, leap: true }, // 화면 천장까지 뛰어오른다
   follow: { label: "🏃 따라와", state: "idle", ms: 7000, follow: true },
   fetch: { label: "🎾 공 던지기", state: "idle", ms: 25000, fetch: true }, // ms는 혹시 못 끝낼 때를 위한 한도
@@ -95,9 +97,50 @@ function growForAWhile() {
   bigTimer = setTimeout(() => setBig(1), BIG_MS);
 }
 
+// 힘든 놀이를 쉬지 않고 시키면 지친다: 점프 2번 연속, 공 던지기 3번 연속
+const TIRING = { jump: 2, fetch: 3 };
+const STREAK_GAP = 120_000; // 이만큼 쉬었다 시키면 연속으로 치지 않는다
+const TIRED_MS = 8000; // 엎드려 쉬는 시간
+const TIRED_LINES = ["헥헥… 조금만 쉴게요, 멍…", "아이고 숨차요… 잠깐만요, 멍…", "헥… 헥… 너무 신나게 놀았어요, 멍…"];
+const REST_LINES = ["헥헥… 아직 숨차요. 조금만 더 쉴게요, 멍…", "조금만요… 금방 일어날게요, 멍…"];
+const pickLine = (lines) => lines[Math.floor(Math.random() * lines.length)];
+let streak = { name: null, n: 0, at: 0 };
+
+// 같은 힘든 놀이를 몇 번째 연속으로 하는지 센다. 이번 놀이가 끝나면 지칠 차례인지 돌려준다.
+function countStreak(name) {
+  const now = Date.now();
+  if (!TIRING[name]) {
+    streak = { name: null, n: 0, at: now }; // 다른 놀이를 하면 처음부터 다시 센다
+    return false;
+  }
+  const n = streak.name === name && now - streak.at < STREAK_GAP ? streak.n + 1 : 1;
+  streak = { name, n, at: now };
+  return n >= TIRING[name];
+}
+
+// 놀이가 끝난 자리에서 부른다. 지칠 차례였으면 엎드려 쉬고 true를 돌려준다.
+function restIfTired() {
+  if (!pet.tireAfter) return false;
+  pet.tireAfter = false;
+  streak = { name: null, n: 0, at: 0 };
+  stopFetch();
+  pet.act = true;
+  pet.follow = false;
+  pet.tired = true;
+  setState("tired", TIRED_MS);
+  say(pickLine(TIRED_LINES), "tired");
+  return true;
+}
+
 function doAction(name) {
   const a = ACTIONS[name];
   if (!a || pet.drag) return;
+  if (pet.tired && TIRING[name]) {
+    say(pickLine(REST_LINES), "tired"); // 지쳐 있을 때는 힘든 놀이를 더 하지 않는다
+    return;
+  }
+  pet.tired = false;
+  pet.tireAfter = countStreak(name);
   pet.act = true;
   pet.dash = false;
   stopFetch();
@@ -243,6 +286,8 @@ function zoomies() {
   pet.act = true;
   pet.follow = false;
   pet.dash = true;
+  pet.tired = false;
+  pet.tireAfter = false;
   brain.day.bump("plays");
   setState("walk", DASH_MS);
 }
@@ -309,7 +354,12 @@ function tick() {
     pet.y = c.y - pet.drag.dy;
   } else if (pet.y < groundY()) {
     // 들어 올렸다 놓으면 바닥으로 떨어진다
-    pet.vy += GRAVITY;
+    if (pet.glide) {
+      // 날개를 파닥이며 천천히, 좌우로 살랑살랑 흔들리며 내려온다
+      pet.vy = Math.min(GLIDE_SPEED, pet.vy + 0.35);
+      pet.glide += TICK;
+      pet.x = Math.max(minX(), Math.min(maxX(), pet.x + Math.cos(pet.glide / 420) * 1.3));
+    } else pet.vy += GRAVITY;
     pet.y = Math.min(groundY(), pet.y + pet.vy);
     if (pet.act) pet.timer -= TICK;
     if (pet.follow) {
@@ -319,8 +369,9 @@ function tick() {
     }
     if (pet.y >= groundY()) {
       pet.vy = 0;
+      pet.glide = 0;
       if (pet.follow && pet.timer > 0) setState("idle"); // 따라오기는 남은 시간 동안 계속한다
-      else {
+      else if (!restIfTired()) {
         pet.act = false;
         pet.follow = false;
         setState("idle", 1500);
@@ -337,10 +388,11 @@ function tick() {
       if (pet.follow) followCursor();
       if (pet.dash) dashStep();
       if (pet.fetch) fetchStep();
-      if (pet.timer <= 0) {
+      if (pet.timer <= 0 && !restIfTired()) {
         pet.act = false;
         pet.follow = false;
         pet.dash = false;
+        pet.tired = false;
         stopFetch();
         setState("idle", 1200);
       }
@@ -479,8 +531,20 @@ function createWindow() {
     if (process.env.PUPPY_SHOT) debugShots(process.env.PUPPY_SHOT);
     // 개발용: 시작 3초 뒤에 지정한 동작을 시킨다 (예: PUPPY_ACT=follow)
     if (process.env.PUPPY_BIG) setTimeout(growForAWhile, 3000); // 개발용: 시작 3초 뒤에 커진다
+    if (process.env.PUPPY_DROP) {
+      // 개발용: 시작 3초 뒤에 화면 위쪽에서 놓은 것처럼 한다
+      setTimeout(() => {
+        pet.y = area.y + 40;
+        pet.vy = 0;
+        pet.glide = 1;
+        setState("fly");
+      }, 3000);
+    }
     if (process.env.PUPPY_ACT) {
-      setTimeout(() => (process.env.PUPPY_ACT === "dash" ? zoomies() : doAction(process.env.PUPPY_ACT)), 3000);
+      // 쉼표로 여러 개를 주면 PUPPY_GAP(ms, 기본 7000) 간격으로 차례로 시킨다 (예: PUPPY_ACT=jump,jump)
+      process.env.PUPPY_ACT.split(",").forEach((name, i) => {
+        setTimeout(() => (name === "dash" ? zoomies() : doAction(name)), 3000 + i * Number(process.env.PUPPY_GAP || 7000));
+      });
     }
     if (process.env.PUPPY_LOG) {
       // 개발용: 2초마다 상태를 기록한다
@@ -488,7 +552,7 @@ function createWindow() {
       setInterval(() => tops.push(win.getPosition()[1]), TICK);
       setInterval(() => {
         const [wx, wy] = win.getPosition();
-        console.log(`ball=${ball ? `${ball.mode}@${Math.round(ball.x)},${Math.round(ball.y)}` : "-"} fetch=${pet.fetch ? pet.fetch.phase : "-"} top=${Math.min(...tops.splice(0))} mouse=${mousePoint().x} act=${!!pet.act} state=${pet.state} busy=${pet.busy} timer=${Math.round(pet.timer)} x=${Math.round(pet.x)} win=${wx},${wy} ground=${groundY()} visible=${win.isVisible()}`);
+        console.log(`ball=${ball ? `${ball.mode}@${Math.round(ball.x)},${Math.round(ball.y)}` : "-"} fetch=${pet.fetch ? pet.fetch.phase : "-"} top=${Math.min(...tops.splice(0))} mouse=${mousePoint().x} act=${!!pet.act} state=${pet.state} tired=${!!pet.tired} busy=${pet.busy} timer=${Math.round(pet.timer)} x=${Math.round(pet.x)} win=${wx},${wy} ground=${groundY()} visible=${win.isVisible()}`);
       }, 2000);
     }
   });
@@ -514,7 +578,7 @@ async function debugShots(dir) {
     await wait(280);
     await shot(`2-idle-${i}`);
   }
-  for (const st of ["sit", "eat", "coffee", "study", "sleep", "drag", "happy", "pet", "paw", "leap"]) {
+  for (const st of ["sit", "eat", "coffee", "study", "sleep", "drag", "happy", "pet", "paw", "fly", "tired", "leap"]) {
     setState(st);
     await wait(st === "happy" ? 480 : 700); // 신남은 가장 높이 뛴 장면을 찍는다
     await shot(`2-${st}`);
@@ -552,6 +616,9 @@ ipcMain.on("drag-start", () => {
   pet.drag = { dx: c.x - pet.x, dy: c.y - pet.y };
   pet.act = false;
   pet.dash = false;
+  pet.glide = 0;
+  pet.tired = false;
+  pet.tireAfter = false;
   stopFetch();
   setState("drag");
 });
@@ -559,6 +626,10 @@ ipcMain.on("drag-end", () => {
   pet.drag = null;
   pet.vy = 0;
   if (pet.y >= groundY()) setState("idle", 1500);
+  else if (groundY() - pet.y > GLIDE_MIN) {
+    pet.glide = 1; // 높은 데서 놓으면 날개를 타고 내려온다 (값은 내려온 시간)
+    setState("fly");
+  }
 });
 ipcMain.on("focus", () => win.focus());
 ipcMain.on("busy", (_e, v) => {

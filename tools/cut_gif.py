@@ -10,6 +10,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 동작 이름: (GIF 파일, 설정)
 #   loop: 반복할 장면 번호(없으면 전부)   ms: 장면당 시간   size: 크기 보정
 #   shadow: 그림에 그려진 바닥 그림자 지우기   tint: 색 보정(R,G,B 배율)
+#   white: 흰 날개처럼 배경과 색이 같은 부분이 있는 그림. 윤곽선 안쪽은 흰색이어도 남긴다
 #   parts: 강아지와 떨어져 있어도 남길 덩어리의 최소 크기(가장 큰 덩어리 대비 비율). 없으면 가장 큰 덩어리만
 JOBS = {
     "run": ("run.gif", dict(loop=[1, 2, 3, 4], ms=115, size=1.18)),  # 0번은 서 있는 장면이라 뺀다
@@ -17,16 +18,24 @@ JOBS = {
     "wag": ("wag.gif", dict(ms=130, size=1.08, shadow=True, tint=(0.984, 0.957, 0.947))),
     "happy": ("jump.gif", dict(ms=140, size=1.08, shadow=True, tint=(0.984, 0.971, 0.933))),  # 신나서 폴짝 뛰기
     "eat": ("eat.gif", dict(ms=180, size=1.12, shadow=True, tint=(0.988, 0.980, 0.962), parts=0.08)),  # 밥그릇도 남긴다
+    # 앉아서 앞발 흔들기. 앉은 그림이라 다른 앉은 동작(sit)과 키가 같아지게 맞춘다
+    "paw": ("paw.gif", dict(ms=180, size=1.062, shadow=True, tint=(0.984, 0.954, 0.919))),
+    # 지쳐서 엎드려 헥헥거리기. 엎드린 그림이라 키가 아니라 몸길이가 어울리게 줄인다 (입김·땀 표시는 빠진다)
+    "tired": ("tired.gif", dict(ms=160, size=0.612, shadow=True, tint=(0.993, 0.995, 0.972))),
+    # 날개를 파닥이며 떠 있기. 들어 올렸다 놓으면 이 모습으로 내려온다
+    "fly": ("wing.gif", dict(ms=140, size=1.09, white=True, tint=(0.984, 0.954, 0.919))),
 }
 
 
-def dog_mask(rgba, shadow=False, parts=None):
+def dog_mask(rgba, shadow=False, parts=None, white=False):
     """투명한 곳과 거기에 이어진 옅은 배경(흰 바탕·체크무늬)을 지우고 가장 큰 덩어리(강아지)만 남긴다."""
     a = np.asarray(rgba).astype(int)
     rgb, alpha = a[:, :, :3], a[:, :, 3]
     mn, mx = rgb.min(axis=2), rgb.max(axis=2)
     clear = alpha < 128
     empty = clear | ((mn > 185) & (mx - mn < 48))
+    if white:  # 거의 순백인 곳만 배경으로 본다. 날개의 회색 윤곽선이 막아 주어 날개 안쪽은 남는다
+        empty = clear | (mn > 240)
     if shadow:  # 옅은 베이지색 바닥 그림자도 배경으로 본다 (털은 훨씬 진한 노랑이라 남는다)
         empty |= (mn > 160) & (mx - mn < 72)
     lab, _ = ndi.label(empty)
@@ -34,6 +43,10 @@ def dog_mask(rgba, shadow=False, parts=None):
     fg = ~np.isin(lab, seeds[seeds > 0])
     comp, n = ndi.label(fg, structure=np.ones((3, 3)))
     sizes = ndi.sum(fg, comp, range(1, n + 1))
+    if white:  # 날개 끝에 붙은 가는 움직임 표시선을 떼어 낸다
+        core, k = ndi.label(ndi.binary_opening(fg, iterations=3))
+        big = core == (int(np.argmax(ndi.sum(core > 0, core, range(1, k + 1)))) + 1)
+        return fg & ndi.binary_dilation(big, iterations=3)
     if parts:
         # 가는 그림자 자국으로 이어진 부스러기를 떼어 내려고, 조금 깎은 뒤에 큰 덩어리만 골라 되살린다
         core, k = ndi.label(ndi.binary_erosion(fg, iterations=3))
@@ -56,14 +69,14 @@ def reference_height():
     return big[0].stop - big[0].start
 
 
-def cut(name, file, ref_h, loop=None, ms=120, size=1.0, shadow=False, tint=None, parts=None):
+def cut(name, file, ref_h, loop=None, ms=120, size=1.0, shadow=False, tint=None, parts=None, white=False):
     gif = Image.open(os.path.join(ROOT, "art", file))
     frames = []
     for i in range(gif.n_frames):
         gif.seek(i)
         frames.append(gif.convert("RGBA"))
     loop = loop or list(range(len(frames)))
-    masks = {i: dog_mask(frames[i], shadow, parts) for i in set(loop) | {0}}
+    masks = {i: dog_mask(frames[i], shadow, parts, white) for i in set(loop) | {0}}
 
     stand = box(masks[0])  # 첫 장면(서 있는 모습): 크기와 바닥 높이의 기준
     ground = stand[3]

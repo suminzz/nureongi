@@ -108,6 +108,60 @@
     "cx": 202.0,
     "foot": 3
   },
+  "paw": {
+    "frames": [
+      "paw1.png",
+      "paw2.png",
+      "paw3.png",
+      "paw4.png",
+      "paw5.png",
+      "paw6.png",
+      "paw7.png",
+      "paw8.png"
+    ],
+    "ms": 180,
+    "k": 0.828,
+    "w": 321,
+    "h": 372,
+    "cx": 162.9,
+    "foot": 4
+  },
+  "tired": {
+    "frames": [
+      "tired1.png",
+      "tired2.png",
+      "tired3.png",
+      "tired4.png",
+      "tired5.png",
+      "tired6.png",
+      "tired7.png",
+      "tired8.png"
+    ],
+    "ms": 160,
+    "k": 1.0,
+    "w": 406,
+    "h": 175,
+    "cx": 202.6,
+    "foot": 3
+  },
+  "fly": {
+    "frames": [
+      "fly1.png",
+      "fly2.png",
+      "fly3.png",
+      "fly4.png",
+      "fly5.png",
+      "fly6.png",
+      "fly7.png",
+      "fly8.png"
+    ],
+    "ms": 140,
+    "k": 0.827,
+    "w": 304,
+    "h": 368,
+    "cx": 153.6,
+    "foot": 3
+  },
   "pet": {
     "frames": [
       "sit2.png",
@@ -120,22 +174,6 @@
     "w": 330,
     "h": 367,
     "cx": 159,
-    "foot": 3
-  },
-  "paw": {
-    "frames": [
-      "happy1.png",
-      "happy2.png",
-      "happy2.png",
-      "happy2.png",
-      "happy2.png",
-      "happy1.png"
-    ],
-    "ms": 300,
-    "k": 0.865,
-    "w": 334,
-    "h": 440,
-    "cx": 166.2,
     "foot": 3
   },
   "leap": {

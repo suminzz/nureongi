@@ -12,7 +12,7 @@ const shadow = document.getElementById("shadow");
 let big = 1; // 강아지 크기 배율 (쓰다듬기를 많이 하면 잠깐 커진다)
 // 본체가 알려 주는 상태 → 보여 줄 그림
 const POSE = { idle: "wag", walk: "run", sit: "sit", sleep: "sleep", drag: "surprise",
-  eat: "eat", coffee: "coffee", study: "study", happy: "happy", pet: "pet", paw: "paw", leap: "leap" };
+  eat: "eat", coffee: "coffee", study: "study", happy: "happy", pet: "pet", paw: "paw", leap: "leap", fly: "fly", tired: "tired" };
 
 let sprites = null;
 let current = { state: "idle", dir: -1 };
