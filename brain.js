@@ -6,7 +6,8 @@ const Anthropic = sdk.Anthropic ?? sdk.default ?? sdk;
 
 const MODEL = "claude-opus-5-5"; // 누렁이의 말과 판단
 const SEARCH_MODEL = "claude-haiku-5-5"; // 웹 검색 담당 (저렴한 모델)
-const usage = { main: { in: 0, out: 0 }, search: { in: 0, out: 0, searches: 0 } }; // 사용량 집계
+const NAG_MODEL = "claude-haiku-5-5"; // 먼저 거는 말(알림, 한마디) 담당. 자주 부르므로 저렴한 모델을 쓴다
+const usage = { main: { in: 0, out: 0 }, nag: { in: 0, out: 0 }, search: { in: 0, out: 0, searches: 0 } }; // 사용량 집계
 const reminders = require("./reminders");
 const day = require("./day");
 const DEFAULTS = { name: "누렁이", goals: [], nagMinutes: 30, reminders: reminders.DEFAULTS };
@@ -242,22 +243,29 @@ function situation(activeMinutes) {
 // ---------- Claude 호출 ----------
 
 // agent 루프: Claude가 도구를 쓰겠다고 하면 실행해서 결과를 돌려주고, 말을 마칠 때까지 반복한다.
-async function ask(messages, { tools } = {}) {
+// light: 먼저 거는 말처럼 가벼운 일은 저렴한 모델에 맡긴다
+async function ask(messages, { tools, light } = {}) {
   const name = loadSettings().name;
   for (let i = 0; i < 8; i++) {
-    const res = await client.beta.messages.create({
-      model: MODEL,
+    const request = {
       max_tokens: 4000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
       output_config: { effort: "low" },
       system: systemPrompt(name),
       ...(tools ? { tools } : {}),
       messages,
-    });
+    };
+    const res = light
+      ? await client.messages.create({ model: NAG_MODEL, ...request })
+      : await client.beta.messages.create({
+          model: MODEL,
+          betas: ["server-side-fallback-2026-07-01"],
+          fallbacks: "default",
+          ...request,
+        });
     messages.push({ role: "assistant", content: res.content });
-    usage.main.in += res.usage.input_tokens;
-    usage.main.out += res.usage.output_tokens;
+    const used = light ? usage.nag : usage.main;
+    used.in += res.usage.input_tokens;
+    used.out += res.usage.output_tokens;
 
     if (res.stop_reason === "tool_use") {
       const results = await Promise.all(
@@ -431,7 +439,7 @@ async function nag(activeMinutes, kind = "free") {
     },
   ];
   try {
-    const line = await ask(messages);
+    const line = await ask(messages, { light: true });
     recentNags.push(line);
     if (recentNags.length > 4) recentNags.shift();
     return line;
